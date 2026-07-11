@@ -20,9 +20,13 @@ class OrderBook {
         val bids = bidsPerPeriod.computeIfAbsent(period) { TreeMap(Comparator.reverseOrder()) }
         val asks = asksPerPeriod.computeIfAbsent(period) { TreeMap() }
 
-        return when (side) {
-            OrderSide.BUY -> processBuyOrder(bids, asks, quantity, price)
-            OrderSide.SELL -> processSellOrder(bids, asks, quantity, price)
+        return synchronized(bids) {
+            synchronized(asks) {
+                when (side) {
+                    OrderSide.BUY -> processBuyOrder(bids, asks, quantity, price)
+                    OrderSide.SELL -> processSellOrder(bids, asks, quantity, price)
+                }
+            }
         }
     }
 
@@ -78,15 +82,30 @@ class OrderBook {
         return quantity - remaining
     }
 
-    fun getBids(period: DeliveryPeriod): Map<BigDecimal, BigDecimal> = bidsPerPeriod[period]?.toMap() ?: emptyMap()
+    fun getBids(period: DeliveryPeriod): Map<BigDecimal, BigDecimal> {
+        val bids = bidsPerPeriod[period] ?: return emptyMap()
+        return synchronized(bids) { bids.toMap() }
+    }
 
-    fun getAsks(period: DeliveryPeriod): Map<BigDecimal, BigDecimal> = asksPerPeriod[period]?.toMap() ?: emptyMap()
+    fun getAsks(period: DeliveryPeriod): Map<BigDecimal, BigDecimal> {
+        val asks = asksPerPeriod[period] ?: return emptyMap()
+        return synchronized(asks) { asks.toMap() }
+    }
 
-    fun getBestBid(period: DeliveryPeriod): PriceLevel? =
-        bidsPerPeriod[period]?.firstEntry()?.let { PriceLevel(it.key, it.value) }
+    fun getBestBid(period: DeliveryPeriod): PriceLevel? {
+        val bids = bidsPerPeriod[period] ?: return null
+        return synchronized(bids) { bids.firstEntry()?.let { PriceLevel(it.key, it.value) } }
+    }
 
-    fun getBestAsk(period: DeliveryPeriod): PriceLevel? =
-        asksPerPeriod[period]?.firstEntry()?.let { PriceLevel(it.key, it.value) }
+    fun getBestAsk(period: DeliveryPeriod): PriceLevel? {
+        val asks = asksPerPeriod[period] ?: return null
+        return synchronized(asks) { asks.firstEntry()?.let { PriceLevel(it.key, it.value) } }
+    }
+
+    fun getAvailableSupply(period: DeliveryPeriod): BigDecimal {
+        val asks = asksPerPeriod[period] ?: return BigDecimal.ZERO
+        return synchronized(asks) { asks.values.fold(BigDecimal.ZERO) { acc, qty -> acc + qty } }
+    }
 
     fun getAllPeriods(): Set<DeliveryPeriod> = bidsPerPeriod.keys + asksPerPeriod.keys
 }

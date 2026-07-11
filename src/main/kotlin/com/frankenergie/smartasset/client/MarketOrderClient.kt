@@ -3,6 +3,7 @@ package com.frankenergie.smartasset.client
 import com.frankenergie.smartasset.model.MarketOrder
 import org.springframework.beans.factory.annotation.Value
 import org.springframework.stereotype.Component
+import java.nio.file.FileAlreadyExistsException
 import java.nio.file.Files
 import java.nio.file.Path
 import java.nio.file.StandardOpenOption
@@ -33,7 +34,9 @@ class MarketOrderClient(
     private fun ensureFileExists() {
         if (!Files.exists(file)) {
             file.parent?.let { Files.createDirectories(it) }
-            Files.createFile(file)
+            try {
+                Files.createFile(file)
+            } catch (_: FileAlreadyExistsException) { }
         }
     }
 
